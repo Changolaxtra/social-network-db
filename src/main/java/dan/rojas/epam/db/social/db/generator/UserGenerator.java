@@ -1,26 +1,18 @@
 package dan.rojas.epam.db.social.db.generator;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dan.rojas.epam.db.social.db.batch.UserBatchPreparedStatement;
+import dan.rojas.epam.db.social.db.holder.PrimaryKeysHolder;
 import dan.rojas.epam.db.social.db.model.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -28,48 +20,43 @@ import java.util.stream.IntStream;
 @Order(1)
 @Component
 @RequiredArgsConstructor
-public class UserGenerator extends AbstractGenerator implements CommandLineRunner {
-
-  @Value("${db.batch.size}")
-  private int batchSize;
-
-  @Value("${db.users.size}")
-  private int usersSize;
+public class UserGenerator extends BaseGenerator<User> implements CommandLineRunner {
 
   @Value("${db.user.insert.statement}")
   private String userInsertStatement;
 
+  @Value("${db.users.size}")
+  private int usersSize;
 
   private final JdbcTemplate jdbcTemplate;
+  private final PrimaryKeysHolder primaryKeysHolder;
+
+  @Override
+  protected JdbcTemplate getJdbcTemplate() {
+    return jdbcTemplate;
+  }
+
+  @Override
+  protected String getInsertStatement() {
+    return userInsertStatement;
+  }
 
   @Override
   public void run(String... args) throws Exception {
     final List<String> names = getListFromJson("names.json");
     final List<String> lastnames = getListFromJson("lastnames.json");
     final List<User> users = new ArrayList<>();
-    final int namesSize = names.size();
-    final int lastnamesSize = lastnames.size();
-    log.info("{} Names and {} Lastnames loaded", namesSize, lastnamesSize);
+    log.info("{} Names and {} Lastnames loaded", names.size(), lastnames.size());
 
-    final Random random = new Random();
+    log.info("Generating Users...");
     IntStream.range(0, usersSize)
-        .forEach(i -> users.add(generateUser(names.get(random.nextInt(namesSize-1)),
-            lastnames.get(random.nextInt(lastnamesSize-1)))));
+        .forEach(i -> users.add(generateUser(getRandomFromList(names), getRandomFromList(lastnames))));
 
-    final ExecutorService executor = Executors.newFixedThreadPool(10);
+    insertBatch(users, UserBatchPreparedStatement::new);
+    log.info("{} users inserted", usersSize);
 
-    final AtomicInteger subLists = new AtomicInteger();
-    users.stream()
-        .collect(Collectors.groupingBy(userList -> subLists.getAndIncrement() / batchSize))
-        .values()
-        .forEach(this::userBatchInsert);
-
-  }
-
-  private List<String> getListFromJson(final String jsonFile) throws IOException {
-    final ObjectMapper mapper = new ObjectMapper();
-    final InputStream inputStream = new ClassPathResource(jsonFile).getInputStream();
-    return mapper.readValue(inputStream, new TypeReference<List<String>>(){});
+    final List<String> usersIdList = users.stream().map(User::getId).collect(Collectors.toList());
+    primaryKeysHolder.setUsersIdList(usersIdList);
   }
 
   private User generateUser(final String name, final String lastname) {
@@ -77,12 +64,8 @@ public class UserGenerator extends AbstractGenerator implements CommandLineRunne
         .id(getRandomId())
         .firstName(name)
         .surname(lastname)
-        .birthdate(getRandomDate(60))
+        .birthdate(getRandomDateBirth(60))
         .build();
-  }
-
-  private void userBatchInsert(final List<User> partition) {
-    jdbcTemplate.batchUpdate(userInsertStatement, new UserBatchPreparedStatement(partition));
   }
 
 }

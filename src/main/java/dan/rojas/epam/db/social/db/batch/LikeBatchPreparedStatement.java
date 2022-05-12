@@ -1,6 +1,6 @@
 package dan.rojas.epam.db.social.db.batch;
 
-import dan.rojas.epam.db.social.db.model.User;
+import dan.rojas.epam.db.social.db.model.Like;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 
@@ -11,22 +11,21 @@ import java.util.List;
 import java.util.Optional;
 
 @RequiredArgsConstructor
-public class UserBatchPreparedStatement implements BatchPreparedStatementSetter {
+public class LikeBatchPreparedStatement implements BatchPreparedStatementSetter {
 
-  private final List<User> users;
+  private final List<Like> likes;
 
   @Override
   public void setValues(PreparedStatement ps, int i) throws SQLException {
-    final User user = users.get(i);
-    ps.setString(1, user.getId());
-    ps.setString(2, user.getFirstName());
-    ps.setString(3, user.getSurname());
-    ps.setDate(4, new Date(user.getBirthdate().getTime()));
+    final Like like = likes.get(i);
+    ps.setString(1, like.getPostId());
+    ps.setString(2, like.getUserId());
+    ps.setDate(3, new Date(like.getTimestamp().getTime()));
   }
 
   @Override
   public int getBatchSize() {
-    return Optional.ofNullable(users)
+    return Optional.ofNullable(likes)
         .map(List::size)
         .orElse(0);
   }

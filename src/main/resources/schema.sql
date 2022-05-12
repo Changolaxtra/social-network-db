@@ -11,7 +11,7 @@ CREATE TABLE user (
     CONSTRAINT PK_User PRIMARY KEY(id)
 );
 
-CREATE TABLE frienship (
+CREATE TABLE friendship (
     user_id1 VARCHAR(10) NOT NULL,
     user_id2 VARCHAR(10) NOT NULL,
     timestamp DATETIME NOT NULL,
