@@ -1,15 +1,15 @@
 package dan.rojas.epam.db.social.db.generator;
 
+import dan.rojas.epam.db.social.config.FriendshipConfig;
 import dan.rojas.epam.db.social.db.batch.FriendshipBatchPreparedStatement;
 import dan.rojas.epam.db.social.db.holder.PrimaryKeysHolder;
 import dan.rojas.epam.db.social.db.model.Friendship;
+import dan.rojas.epam.db.social.db.repository.BatchRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -20,29 +20,13 @@ import java.util.concurrent.ThreadLocalRandom;
 @Order(2)
 @Component
 @RequiredArgsConstructor
-public class FriendshipGenerator extends BaseGenerator<Friendship> implements CommandLineRunner {
+public class FriendshipGenerator implements CommandLineRunner {
 
-  private final JdbcTemplate jdbcTemplate;
+  private final BatchRepository batchRepository;
   private final PrimaryKeysHolder primaryKeysHolder;
+  private final RandomDataGenerator randomDataGenerator;
+  private final FriendshipConfig friendshipConfig;
 
-  @Value("${db.friendship.insert.statement}")
-  private String friendshipInsertStatement;
-
-  @Value("${db.friendship.min}")
-  private int minFriendships;
-
-  @Value("${db.friendship.max}")
-  private int maxFriendships;
-
-  @Override
-  protected JdbcTemplate getJdbcTemplate() {
-    return jdbcTemplate;
-  }
-
-  @Override
-  protected String getInsertStatement() {
-    return friendshipInsertStatement;
-  }
 
   @Override
   public void run(String... args) throws Exception {
@@ -51,11 +35,12 @@ public class FriendshipGenerator extends BaseGenerator<Friendship> implements Co
 
     log.info("Generating Friendships...");
     for (final String userId : usersIdList) {
-      final int totalFriendshipsByUser = ThreadLocalRandom.current().nextInt(minFriendships, maxFriendships);
+      final int totalFriendshipsByUser = ThreadLocalRandom.current()
+          .nextInt(friendshipConfig.getMinFriendships(), friendshipConfig.getMaxFriendships());
       int generatedFriendships = 0;
       final List<String> currentFriendships = new ArrayList<>();
       while (generatedFriendships < totalFriendshipsByUser) {
-        final String friendId = getRandomFromList(usersIdList);
+        final String friendId = randomDataGenerator.getRandomFromList(usersIdList);
         if (isFriendshipValid(userId, friendId, currentFriendships)) {
           friendships.add(generateFriendship(userId, friendId));
           currentFriendships.add(friendId);
@@ -64,7 +49,8 @@ public class FriendshipGenerator extends BaseGenerator<Friendship> implements Co
       }
     }
 
-    insertBatch(friendships, FriendshipBatchPreparedStatement::new);
+    batchRepository.insert(friendshipConfig.getFriendshipInsertStatement(),
+        friendships, FriendshipBatchPreparedStatement::new);
     log.info("{} friendships inserted", friendships.size());
   }
 
@@ -72,7 +58,7 @@ public class FriendshipGenerator extends BaseGenerator<Friendship> implements Co
     return Friendship.builder()
         .userId1(userId)
         .userId2(friendId)
-        .timestamp(getRandomDateBetween(2000, 2025))
+        .timestamp(randomDataGenerator.getRandomDateBetween(2000, 2025))
         .build();
   }
 
