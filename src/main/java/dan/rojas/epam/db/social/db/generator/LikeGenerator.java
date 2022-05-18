@@ -1,14 +1,14 @@
 package dan.rojas.epam.db.social.db.generator;
 
+import dan.rojas.epam.db.social.config.LikeConfig;
 import dan.rojas.epam.db.social.db.batch.LikeBatchPreparedStatement;
 import dan.rojas.epam.db.social.db.holder.PrimaryKeysHolder;
 import dan.rojas.epam.db.social.db.model.Like;
+import dan.rojas.epam.db.social.db.repository.BatchRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -21,47 +21,30 @@ import java.util.concurrent.ThreadLocalRandom;
 @Order(4)
 @Component
 @RequiredArgsConstructor
-public class LikeGenerator extends BaseGenerator<Like> implements CommandLineRunner {
+public class LikeGenerator implements CommandLineRunner {
 
-  private final JdbcTemplate jdbcTemplate;
+  private final BatchRepository batchRepository;
   private final PrimaryKeysHolder primaryKeysHolder;
+  private final RandomDataGenerator randomDataGenerator;
+  private final LikeConfig likeConfig;
 
-  @Value("${db.like.insert.statement}")
-  private String likeInsertStatement;
-
-  @Value("${db.like.max}")
-  private int maxLikes;
-
-  @Value("${db.like.min}")
-  private int minLikes;
-
-  @Value("${db.like.percentage}")
-  private double percentage;
-
-  @Override
-  protected JdbcTemplate getJdbcTemplate() {
-    return jdbcTemplate;
-  }
-
-  @Override
-  protected String getInsertStatement() {
-    return likeInsertStatement;
-  }
 
   @Override
   public void run(String... args) throws Exception {
-    final Set<String> postsIdList = getRandomPartitionSet(primaryKeysHolder.getPostsIdList(), percentage);
+    final Set<String> postsIdList =
+        getRandomPartitionSet(primaryKeysHolder.getPostsIdList(), likeConfig.getPercentage());
     final List<String> usersIdList = primaryKeysHolder.getUsersIdList();
     final List<Like> likes = new ArrayList<>();
 
     log.info("Generating Likes...");
     for (final String postId : postsIdList) {
-      final int totalLikesByPost = ThreadLocalRandom.current().nextInt(minLikes, maxLikes);
+      final int totalLikesByPost = ThreadLocalRandom.current()
+          .nextInt(likeConfig.getMinLikes(), likeConfig.getMaxLikes());
       final List<String> users = new ArrayList<>();
       int generatedLikes = 0;
 
       while (generatedLikes < totalLikesByPost) {
-        final String userId = getRandomFromList(usersIdList);
+        final String userId = randomDataGenerator.getRandomFromList(usersIdList);
         if (!users.contains(userId)) {
           likes.add(generateLike(postId, userId));
           users.add(userId);
@@ -70,7 +53,7 @@ public class LikeGenerator extends BaseGenerator<Like> implements CommandLineRun
       }
     }
 
-    insertBatch(likes, LikeBatchPreparedStatement::new);
+    batchRepository.insert(likeConfig.getLikeInsertStatement(),likes, LikeBatchPreparedStatement::new);
     log.info("{} likes inserted", likes.size());
   }
 
@@ -78,7 +61,7 @@ public class LikeGenerator extends BaseGenerator<Like> implements CommandLineRun
     final Set<String> result = new HashSet<>();
     final double total = postsIdList.size() * (percentage / 100);
     while (result.size() < total) {
-      result.add(getRandomFromList(postsIdList));
+      result.add(randomDataGenerator.getRandomFromList(postsIdList));
     }
     return result;
   }
@@ -87,7 +70,7 @@ public class LikeGenerator extends BaseGenerator<Like> implements CommandLineRun
     return Like.builder()
         .userId(userId)
         .postId(postId)
-        .timestamp(getRandomDateBetween(2006, 2025))
+        .timestamp(randomDataGenerator.getRandomDateBetween(2024, 2025))
         .build();
   }
 

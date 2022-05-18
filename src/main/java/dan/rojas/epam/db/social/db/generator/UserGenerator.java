@@ -1,14 +1,14 @@
 package dan.rojas.epam.db.social.db.generator;
 
+import dan.rojas.epam.db.social.config.UserConfig;
 import dan.rojas.epam.db.social.db.batch.UserBatchPreparedStatement;
 import dan.rojas.epam.db.social.db.holder.PrimaryKeysHolder;
 import dan.rojas.epam.db.social.db.model.User;
+import dan.rojas.epam.db.social.db.repository.BatchRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -20,40 +20,28 @@ import java.util.stream.IntStream;
 @Order(1)
 @Component
 @RequiredArgsConstructor
-public class UserGenerator extends BaseGenerator<User> implements CommandLineRunner {
+public class UserGenerator implements CommandLineRunner {
 
-  @Value("${db.user.insert.statement}")
-  private String userInsertStatement;
-
-  @Value("${db.users.size}")
-  private int usersSize;
-
-  private final JdbcTemplate jdbcTemplate;
+  private final BatchRepository batchRepository;
   private final PrimaryKeysHolder primaryKeysHolder;
-
-  @Override
-  protected JdbcTemplate getJdbcTemplate() {
-    return jdbcTemplate;
-  }
-
-  @Override
-  protected String getInsertStatement() {
-    return userInsertStatement;
-  }
+  private final RandomDataGenerator randomDataGenerator;
+  private final UserConfig userConfig;
 
   @Override
   public void run(String... args) throws Exception {
-    final List<String> names = getListFromJson("names.json");
-    final List<String> lastnames = getListFromJson("lastnames.json");
+    final List<String> names = randomDataGenerator.getListFromJson("names.json");
+    final List<String> lastnames = randomDataGenerator.getListFromJson("lastnames.json");
     final List<User> users = new ArrayList<>();
     log.info("{} Names and {} Lastnames loaded", names.size(), lastnames.size());
 
     log.info("Generating Users...");
-    IntStream.range(0, usersSize)
-        .forEach(i -> users.add(generateUser(getRandomFromList(names), getRandomFromList(lastnames))));
+    IntStream.range(0, userConfig.getUsersSize())
+        .forEach(i ->
+            users.add(generateUser(randomDataGenerator.getRandomFromList(names),
+                randomDataGenerator.getRandomFromList(lastnames))));
 
-    insertBatch(users, UserBatchPreparedStatement::new);
-    log.info("{} users inserted", usersSize);
+    batchRepository.insert(userConfig.getUserInsertStatement(), users, UserBatchPreparedStatement::new);
+    log.info("{} users inserted", users.size());
 
     final List<String> usersIdList = users.stream().map(User::getId).collect(Collectors.toList());
     primaryKeysHolder.setUsersIdList(usersIdList);
@@ -61,10 +49,10 @@ public class UserGenerator extends BaseGenerator<User> implements CommandLineRun
 
   private User generateUser(final String name, final String lastname) {
     return User.builder()
-        .id(getRandomId())
+        .id(randomDataGenerator.getRandomId())
         .firstName(name)
         .surname(lastname)
-        .birthdate(getRandomDateBirth(60))
+        .birthdate(randomDataGenerator.getRandomDateBirth(60))
         .build();
   }
 
